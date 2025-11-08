@@ -1,0 +1,93 @@
+name: CI - ETL Build & Run
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: air_quality
+          MYSQL_USER: air_user
+          MYSQL_PASSWORD: air_pass
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+
+      - name: Create virtualenv & install deps
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 60); do
+            if mysqladmin ping -h 127.0.0.1 -proot --silent; then
+              echo "MySQL is up"
+              break
+            fi
+            echo "Waiting MySQL ($i/60)"
+            sleep 2
+          done
+
+      - name: Init schema
+        run: |
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot < sql/db_schema.sql
+
+      - name: Configure .env for CI
+        run: |
+          cat > .env << 'EOF'
+          DB_URL=mysql+pymysql://air_user:air_pass@127.0.0.1:3306/air_quality?charset=utf8mb4
+          CETESB_CSV_URL=
+          CETESB_CSV_PATH=
+          CETESB_STATION_CODE=29053002
+          CETESB_STATION_NAME=Sorocaba - Parque Vitória Régia
+          INMET_STATION=A703
+          INMET_START_DATE=2024-01-01
+          INMET_END_DATE=2024-01-03
+          OPENAQ_CITY=Sorocaba
+          EDA_POLLUTANT=pm2_5
+          EOF
+
+      - name: Run ETL pipeline
+        env:
+          PYTHONUNBUFFERED: "1"
+        run: |
+          source .venv/bin/activate
+          python pipeline.py
+
+      - name: Run EDA
+        run: |
+          source .venv/bin/activate
+          python scripts/eda_initial.py
+
+      - name: Build ETL Docker image
+        run: |
+          docker build -f Dockerfile.etl -t air-quality-etl:ci .

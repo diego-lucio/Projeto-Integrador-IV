@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "dashboards": [
+    {
+      "name": "Air Quality Starter",
+      "description": "KPIs iniciais (CETESB + INMET)",
+      "cards": [
+        {
+          "name": "Contagem de Registros",
+          "dataset_query": {
+            "type": "native",
+            "native": {
+              "query": "SELECT 'cetesb_readings' AS tabela, COUNT(*) AS n FROM cetesb_readings\nUNION ALL\nSELECT 'inmet_readings' AS tabela, COUNT(*) AS n FROM inmet_readings;"
+            },
+            "database": 1
+          },
+          "display": "table"
+        },
+        {
+          "name": "Top 10 Poluentes por Leituras",
+          "dataset_query": {
+            "type": "native",
+            "native": {
+              "query": "SELECT pollutant, COUNT(*) AS n\nFROM cetesb_readings\nGROUP BY pollutant\nORDER BY n DESC\nLIMIT 10;"
+            },
+            "database": 1
+          },
+          "display": "bar"
+        },
+        {
+          "name": "Série horária (PM2.5)",
+          "dataset_query": {
+            "type": "native",
+            "native": {
+              "query": "SELECT DATE_FORMAT(dt, '%Y-%m-%d %H:00:00') AS hr, AVG(value) AS avg_value\nFROM cetesb_readings\nWHERE pollutant = 'pm2_5'\nGROUP BY hr\nORDER BY hr;"
+            },
+            "database": 1
+          },
+          "display": "line"
+        },
+        {
+          "name": "Instrução: Correlação PM2.5 × Temp",
+          "description": "Crie manualmente um gráfico de dispersão com consulta: SELECT c.value AS pm25, i.temp_c FROM cetesb_readings c JOIN inmet_readings i ON i.dt = c.dt WHERE c.pollutant = 'pm2_5';"
+        }
+      ]
+    }
+  ]
+}
