@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# System deps (optional): build essentials for some wheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project files
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Default envs (can be overridden at runtime)
+ENV PYTHONUNBUFFERED=1 \
+    TZ=America/Sao_Paulo
+
+# Entry runs pipeline once by default.
+# For periodic runs, set ETL_INTERVAL_MINUTES (e.g., 60) to loop.
+ENTRYPOINT ["/app/entrypoint.sh"]
